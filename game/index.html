@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmar Bay — Open-World Crime Game</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ff7a1a'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='%231c1c26'%3ES%3C/text%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1c1c26;
+    font-family: Arial, Helvetica, sans-serif; color: #fff; }
+  #game-canvas { display: block; width: 100%; height: 100%; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: block; }
+  .panel { background: rgba(12, 12, 20, 0.62); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 10px; padding: 8px 12px; }
+  #stats { position: absolute; top: 12px; left: 12px; min-width: 210px; }
+  #health-bar { width: 180px; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin: 4px 0; }
+  #health-fill { height: 100%; width: 100%; background: #5ec95e; }
+  #health-text { font-size: 12px; color: #ddd; }
+  #money { font-size: 22px; font-weight: bold; color: #7de87a; }
+  #stars { position: absolute; top: 12px; right: 12px; font-size: 30px; letter-spacing: 4px;
+    color: #ffd24a; text-shadow: 0 0 8px rgba(0,0,0,0.8); }
+  #stars.hot { color: #ff5040; animation: pulse 0.7s infinite; }
+  @keyframes pulse { 50% { opacity: 0.55; } }
+  #objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    max-width: 520px; text-align: center; font-size: 14px; line-height: 1.4; }
+  #banner { position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
+    font-size: 24px; font-weight: bold; color: #ffd24a; text-align: center;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.9); opacity: 0; transition: opacity 0.3s;
+    max-width: 90%; }
+  #killfeed { position: absolute; top: 64px; right: 12px; text-align: right;
+    font-size: 13px; line-height: 1.7; color: #ffe9a8; text-shadow: 0 1px 4px #000; }
+  #speed { position: absolute; bottom: 170px; right: 16px; font-size: 26px; font-weight: bold;
+    text-shadow: 0 2px 6px #000; }
+  #ammo { position: absolute; bottom: 16px; left: 16px; font-size: 20px; font-weight: bold;
+    text-shadow: 0 2px 6px #000; }
+  #hint { position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; font-weight: bold; color: #fff; text-shadow: 0 2px 6px #000;
+    opacity: 0; transition: opacity 0.2s; }
+  #minimap { position: absolute; bottom: 12px; right: 12px; width: 180px; height: 150px;
+    border: 2px solid rgba(255,255,255,0.5); border-radius: 8px; background: #223; }
+  #bust-warning { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 34px; font-weight: bold; color: #ff4030; opacity: 0;
+    text-shadow: 0 0 16px #000; }
+  #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 20px; color: rgba(255,255,255,0.9); text-shadow: 0 0 4px #000; }
+  #damage-flash { position: fixed; inset: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,0.55) 100%);
+    transition: opacity 0.15s; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, rgba(40,20,60,0.82), rgba(20,10,30,0.88));
+    z-index: 10; }
+  .card { max-width: 640px; width: 92%; padding: 28px 32px; text-align: center;
+    background: rgba(16,16,26,0.92); border: 1px solid #ff7a1a; border-radius: 16px; }
+  .card h1 { font-size: 52px; letter-spacing: 2px; color: #ff7a1a; margin-bottom: 4px; }
+  .card h2 { font-size: 18px; color: #ffd24a; margin-bottom: 14px; font-weight: normal; }
+  .card p { font-size: 15px; line-height: 1.55; color: #e8e8f0; margin-bottom: 12px; text-align: left; }
+  .card .controls { font-size: 13px; color: #b8b8cc; text-align: left; line-height: 1.8;
+    margin: 0 auto 16px; display: inline-block; }
+  .card button { pointer-events: auto; cursor: pointer; font-size: 18px; font-weight: bold;
+    padding: 12px 28px; margin: 4px; border: none; border-radius: 10px; color: #1c1c26;
+    background: #ff7a1a; }
+  .card button.secondary { background: #ffd24a; }
+  .card button:hover { filter: brightness(1.15); }
+  #save-note { font-size: 13px; color: #9fe8ff; margin-top: 8px; min-height: 18px; }
+  #pause-screen { display: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="damage-flash"></div>
+<div id="hud">
+  <div id="stats" class="panel">
+    <div id="money">$0</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-text">100 HP</div>
+  </div>
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="objective" class="panel">Misi 1 "First Wheels": curi Comet oranye di Bayfront Ave</div>
+  <div id="banner"></div>
+  <div id="killfeed"></div>
+  <div id="speed"></div>
+  <div id="ammo">🔫 12 / 12</div>
+  <div id="hint"></div>
+  <canvas id="minimap" width="180" height="150"></canvas>
+  <div id="bust-warning">🚨 POLISI MENDEKAT — LARI! 🚨</div>
+  <div id="crosshair">+</div>
+</div>
+
+<div id="start-screen" class="overlay">
+  <div class="card">
+    <h1>SOLMAR BAY</h1>
+    <h2>Open-world crime game — matahari terbenam di kota pesisir</h2>
+    <p>Rico Marin, sopir pelarian terbaik di Solmar Bay, baru keluar dari penjara dan
+    berutang pada semua orang. Tiga pekerjaan menantinya: curi Comet oranye, kabur dari
+    kejaran polisi di Bayfront, lalu rebut paket dari geng Vultures di Old Pier.
+    Jelajahi kota dengan berjalan kaki atau mobil, curi mobil apa pun, dan jangan
+    sampai tertangkap.</p>
+    <div class="controls">
+      WASD — jalan / mengemudi &nbsp;·&nbsp; Mouse — kamera &amp; bidik (klik canvas untuk kunci mouse)<br>
+      E — masuk / keluar mobil &nbsp;·&nbsp; Klik kiri — tembak &nbsp;·&nbsp; R — isi ulang<br>
+      Space — rem &nbsp;·&nbsp; Ctrl — handbrake &nbsp;·&nbsp; Shift — lari<br>
+      Esc / P — pause &amp; simpan &nbsp;·&nbsp; M — mute
+    </div>
+    <div>
+      <button id="start-btn">▶ MULAI PETUALANGAN</button>
+      <button id="continue-btn" class="secondary" style="display:none">↻ CONTINUE</button>
+    </div>
+    <div id="save-note"></div>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay">
+  <div class="card">
+    <h1 style="font-size:36px">JEDA</h1>
+    <h2>Progres tersimpan otomatis</h2>
+    <div>
+      <button id="resume-btn">▶ LANJUTKAN</button>
+      <button id="menu-btn" class="secondary">≡ MENU UTAMA</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
